@@ -1,16 +1,16 @@
-#include <cstdlib>
-#include <ctime>
-#include <cmath>
 #include "opencv2/imgcodecs.hpp"
 #include <opencv2/highgui.hpp>
 #include "opencv2/imgproc/imgproc.hpp"
 #include "opencv2/opencv.hpp"
-#include <iostream>
+#include <cstdlib>
+#include <ctime>
+#include <cmath>
 #include <chrono>
+#include <iostream>
 
 using namespace std;
-using namespace std::chrono;
 
+static string WINDOW = "Convex Hull";
 
 class Node
 {
@@ -32,43 +32,43 @@ class Line
 class ConvexHull
 {
     private:
-        vector<Line> convex_hull;
-        Node *Nodes;
-        int N_Nodes;
-        int N_Convex_hull;
-
+        
     public:
-        ConvexHull(int N)
-        {
-            N_Convex_hull = 0;
-            N_Nodes = N;
-            Node tmp[N];
-            Nodes = (Node*)malloc(sizeof(Node)*N);
-            Nodes = tmp;
+        int n_node;
+        int n_convex_hull;
+        Node *nodes;
+        vector<Line> convex_hull;
 
+        ConvexHull(int N = 0)
+        {
+            // Only process if N > 0
+            if (N <= 0)
+                return;
+
+            srand(time(NULL));
+            n_node = N;
+            n_convex_hull = 0;
+            nodes = (Node*)malloc(sizeof(Node)*N);
+            nodes = new Node[N];
+            nodes[5].x = 0;
+            nodes[6].x = 0;
+            nodes[7].x = 0;
             Process();
         }
 
         void Process()
         {
-            auto start = high_resolution_clock::now(); 
-
-            for (int i = 0; i < N_Nodes-1; ++i)
+            for (int i = 0; i < n_node-1; ++i)
             {
-                for (int j = i+1; j < N_Nodes; ++j)
+                for (int j = i+1; j < n_node; ++j)
                 {
-                    if (IsConvexHull(Nodes[i], Nodes[j]))
+                    if (IsConvexHull(nodes[i], nodes[j]))
                     {
-                        convex_hull.push_back({Nodes[i], Nodes[j]});
-                        N_Convex_hull++;
-                    }  
+                        convex_hull.push_back({nodes[i], nodes[j]});
+                        n_convex_hull++;
+                    }
                 }
             }
-
-            auto stop = high_resolution_clock::now(); 
-            auto duration = duration_cast<microseconds>(stop - start);
-            cout << "Time process : " << duration.count() << " microseconds" << endl;
-            Show();
         }
 
         bool IsConvexHull(Node p1, Node p2)
@@ -78,77 +78,87 @@ class ConvexHull
             c = p1.x*p2.y-p1.y*p2.x;
 
             int i = 0;
-            while (Nodes[i].x == p1.x && Nodes[i].y == p1.y ||
-            Nodes[i].x == p2.x && Nodes[i].y == p2.y)
-            {
+            while (nodes[i].x == p1.x && nodes[i].y == p1.y ||
+            nodes[i].x == p2.x && nodes[i].y == p2.y)
                 ++i;
-            }
-            bool d = a*Nodes[i].x+b*Nodes[i].y > c;
 
-            for (int j = i+1; j < N_Nodes; ++j)
+            double d = a*nodes[i].x+b*nodes[i].y;
+            bool e = d > c;
+            
+            for (int j = i+1; j < n_node; ++j)
             {   
-                int ax = a*Nodes[j].x,
-                by = b*Nodes[j].y;
+                int ax = a*nodes[j].x,
+                by = b*nodes[j].y;
 
-                if (d && ax+by < c || !d && ax+by > c)
+                if (e && ax+by < c || !e && ax+by > c ||
+                ax+by == c && (nodes[j].y > max(p1.y, p2.y) || 
+                nodes[j].y < min(p1.y, p2.y)))
                     return false;
+                    
             }
             return true;
         }
-        
-        void Show()
+};
+
+class GUI
+{
+    private:
+        ConvexHull CH;
+        int expand,
+        margin_v,
+        margin_h;
+    
+    public:
+        GUI(ConvexHull CH_, int expand_ = 8, int margin_v_ = 0, int margin_h_ = 0)
         {
-            cv::namedWindow("chart", CV_WINDOW_AUTOSIZE);
-            
-            int expand = 8,
-            margin_top_bottom = 50,
-            margin_left_right = 300;
+            CH = CH_;
+            expand = expand_;
+            margin_v = margin_v_;
+            margin_h = margin_h_;
 
-            cv::Mat chart(100*expand+margin_top_bottom, 
-            100*expand+margin_left_right, 
-            CV_8UC3, 
-            cv::Scalar(255, 255, 255));
+            cv::namedWindow(WINDOW, CV_WINDOW_AUTOSIZE);
+            Set();
+        }
 
-            for (int i = 0; i < N_Nodes; ++i) 
+        void Set()
+        {   
+            int width = 100*expand+(margin_h*2),
+            height = 100*expand+(margin_v*2);
+            cv::Mat window(height, width, CV_8UC3, cv::Scalar(255, 255, 255));
+
+            for (int i = 0; i < CH.n_node; ++i) 
             {
-                Node node = Nodes[i];
-                int nodex = node.x*expand+margin_left_right/2,
-                nodey = node.y*expand+margin_top_bottom/2;
-                circle(chart, cv::Point(nodex, nodey), 12.0, cv::Scalar(255, 0, 0), 2, 1);
+                Node node = CH.nodes[i];
+                int nodex = node.x*expand+margin_h,
+                nodey = height-(node.y*expand+margin_v);
+                circle(window, cv::Point(nodex, nodey), 12.0, cv::Scalar(255, 0, 0), 2, 1);
 
-                cv::putText(chart, to_string(node.x) + "," + to_string(node.y), cv::Point(nodex+15, nodey), 
+                cv::putText(window, to_string(node.x) + "," + to_string(node.y), cv::Point(nodex+15, nodey), 
                 cv::FONT_HERSHEY_COMPLEX_SMALL, 0.8, cv::Scalar(0, 0, 0), 1, CV_AA);
             }
 
-            for (int i = 0; i < N_Convex_hull; ++i)
+            for (int i = 0; i < CH.n_convex_hull; ++i)
             {
-                Line l = convex_hull[i];
-                int p1x = l.p1.x*expand+margin_left_right/2,
-                p1y = l.p1.y*expand+margin_top_bottom/2,
-                p2x = l.p2.x*expand+margin_left_right/2,
-                p2y = l.p2.y*expand+margin_top_bottom/2;
+                Line l = CH.convex_hull[i];
+                int p1x = l.p1.x*expand+margin_h,
+                p1y = height-(l.p1.y*expand+margin_v),
+                p2x = l.p2.x*expand+margin_h,
+                p2y = height-(l.p2.y*expand+margin_v);
 
-                line(chart, 
-                cv::Point(p1x, p1y), 
-                cv::Point(p2x, p2y), 
-                cv::Scalar(0, 0, 255), 
-                1, 
-                cv::LINE_AA);
+                line(window, cv::Point(p1x, p1y), cv::Point(p2x, p2y), cv::Scalar(0, 0, 255), 1, cv::LINE_AA);
 
-                circle(chart, 
-                cv::Point(p1x, p1y), 12.0,cv::Scalar(255, 0, 0), -1, 1);
-                circle(chart, 
-                cv::Point(p2x, p2y), 12.0, cv::Scalar(255, 0, 0), -1, 1);
+                circle(window, cv::Point(p1x, p1y), 12.0,cv::Scalar(255, 0, 0), -1, 1);
+                circle(window, cv::Point(p2x, p2y), 12.0, cv::Scalar(255, 0, 0), -1, 1);
             }
 
-            cv::imshow("chart", chart);
+            cv::imshow(WINDOW, window);
             cv::waitKey(0);
         }
 };
 
 int main()
 {
-    srand(time(NULL));
     ConvexHull CH(20);
+    GUI gui(CH, 8, 50, 200);
     return 0;
 }
